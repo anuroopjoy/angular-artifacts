@@ -1,0 +1,78 @@
+# Node.js with Angular
+# Build a Node.js project that uses Angular.
+# Add steps that analyze code, save build artifacts, deploy, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/javascript
+
+trigger:
+  - main
+
+stages:
+  - stage: Build
+    pool:
+      vmImage: "windows-latest"
+    jobs:
+      - job: Build
+        displayName: "Angular App Build"
+        workspace:
+          clean: all
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "16.x"
+            displayName: "Install Node.js"
+
+          - task: Npm@1
+            inputs:
+              command: "install"
+            displayName: "Npm Install"
+
+          - task: Npm@1
+            inputs:
+              command: custom
+              customCommand: "run build"
+            displayName: "Build Angular app"
+
+          - task: Npm@1
+            inputs:
+              command: custom
+              customCommand: "run test"
+            displayName: "Test Angular app"
+
+          - task: Npm@1
+            inputs:
+              command: custom
+              customCommand: "run lint"
+            displayName: "Lint Angular app"
+
+          - script: |
+              mkdir $(Build.ArtifactStagingDirectory)\\dist
+              xcopy "dist\\sample-app" $(Build.ArtifactStagingDirectory)\\dist /E/H/C
+            displayName: Copy dist contents
+
+          - task: PublishBuildArtifacts@1
+            displayName: "Publish Artifact"
+
+  - stage: Deploy
+    dependsOn: Build
+    condition: succeeded('Build')
+    variables:
+      - group: SECRET-DEV
+      - group: VGRP-DEV
+    pool:
+      vmImage: "windows-latest"
+    jobs:
+      - deployment: Deploy
+        displayName: Deploy to Azure
+        environment: DEV
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  displayName: "Deploy Angular app"
+                  inputs:
+                    azureSubscription: $(azureSubscription)
+                    scriptType: batch
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az storage blob upload-batch --overwrite -d $web --account-name $(storageAccount) --account-key $(accountkey) -s "$(Agent.BuildDirectory)\\drop\\dist"

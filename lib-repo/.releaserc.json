@@ -1,0 +1,37 @@
+{
+  "branches": [
+    "master",
+    { "name": "beta", "channel": "beta", "prerelease": true }
+  ],
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "angular",
+        "releaseRules": [
+          {
+            "scope": "no-release",
+            "release": false
+          },
+          {
+            "header": "Merged PR [0-9]+: ([Ff][Ii][Xx]):*",
+            "release": "patch"
+          },
+          {
+            "header": "Merged PR [0-9]+: ([Ff][Ee][Aa][Tt]):*",
+            "release": "minor"
+          }
+        ],
+        "parserOpts": {
+          "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES"]
+        }
+      }
+    ],
+    [
+      "semantic-release-ado",
+      {
+        "setOnlyOnRelease": true
+      }
+    ]
+  ]
+}

@@ -1,0 +1,98 @@
+trigger:
+  - master
+
+stages:
+  - stage: Build
+    pool:
+      vmImage: "windows-latest"
+    variables:
+      version: $(nextRelease)
+    jobs:
+      - job: Build
+        displayName: "Angular Library Build"
+        workspace:
+          clean: all
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "16.x"
+            displayName: "Install Node.js"
+
+          - task: Npm@1
+            inputs:
+              command: "install"
+            displayName: "Npm Install"
+
+          - task: Npm@1
+            inputs:
+              command: custom
+              customCommand: "run build corelib"
+            displayName: "Build Angular lib"
+
+          - task: Npm@1
+            inputs:
+              command: custom
+              customCommand: "run test corelib"
+            displayName: "Test Angular lib"
+
+          - task: Npm@1
+            inputs:
+              command: custom
+              customCommand: "run lint corelib"
+            displayName: "Lint Angular lib"
+
+          - script: >
+              npx semantic-release
+            env: { GH_TOKEN: $(System.AccessToken) }
+            displayName: "Semantic release"
+
+          - script: |
+              echo $(nextRelease)
+            displayName: "Show next version"
+
+          - task: FileTransform@1
+            inputs:
+              folderPath: "dist\\corelib\\"
+              targetFiles: "**/package.json"
+              fileType: json
+            displayName: Replace Tokens
+
+          - script: |
+              xcopy .\\.npmrc "dist\\corelib\\"
+              mkdir $(Build.ArtifactStagingDirectory)\\dist
+              xcopy "dist\\corelib" $(Build.ArtifactStagingDirectory)\\dist /E/H/C
+            displayName: Copy dist contents
+
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)\\dist
+              artifactName: "drop"
+              artifactType: "pipeline"
+            displayName: "Publish Artifact"
+
+  - stage: Publish
+    dependsOn: Build
+    condition: succeeded('Build')
+    pool:
+      vmImage: "windows-latest"
+    jobs:
+      - job:
+        displayName: "Publish npm package"
+        workspace:
+          clean: all
+        steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              source: "current"
+              artifact: "drop"
+              path: '$(Pipeline.Workspace)\\drop'
+          - task: npmAuthenticate@0
+            inputs:
+              workingFile: ".\\.npmrc"
+          - task: Npm@1
+            inputs:
+              command: "publish"
+              workingDir: "$(Agent.BuildDirectory)\\drop"
+              publishRegistry: useFeed
+              publishFeed: anuroopjoy/npm_packages
+            displayName: "Publish npm package"
